@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>情緒流動與平衡深度測評</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: "PingFang TC", "Noto Sans TC", sans-serif; }
+    .stage { animation: fade 0.3s ease; }
+    @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+  </style>
+</head>
+<body class="bg-gradient-to-b from-amber-50 to-orange-50 min-h-screen text-stone-800">
+  <div id="app" class="max-w-xl mx-auto px-5 py-8 pb-32"></div>
+
+  <div id="submitBar" class="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-stone-200 hidden">
+    <div class="max-w-xl mx-auto px-5 py-3">
+      <p id="errMsg" class="text-red-500 text-xs text-center mb-2 hidden"></p>
+      <button id="submitBtn" class="w-full bg-rose-500 text-white font-semibold py-3 rounded-full shadow-md disabled:opacity-40 transition"></button>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./questions.js"></script>
+  <script>
+    const S = window.SURVEY;
+    const CFG = window.SURVEY_CONFIG;
+    const app = document.getElementById("app");
+    const bar = document.getElementById("submitBar");
+    const submitBtn = document.getElementById("submitBtn");
+    const errMsg = document.getElementById("errMsg");
+
+    const state = { stage: "welcome", name: "", answers: {} };
+
+    function dominantOption(arr) {
+      const c = { 1:0, 2:0, 3:0, 4:0, 5:0 };
+      arr.forEach(a => { if (a >= 1 && a <= 5) c[a]++; });
+      let best = 3, bestN = -1;
+      for (const k of [1,2,3,4,5]) if (c[k] > bestN) { best = k; bestN = c[k]; }
+      return best;
+    }
+
+    function render() {
+      if (state.stage === "welcome") return renderWelcome();
+      if (state.stage === "answering") return renderQuestions();
+      if (state.stage === "submitting") return renderSubmitting();
+      if (state.stage === "done") return renderDone();
+    }
+
+    function renderWelcome() {
+      bar.classList.add("hidden");
+      app.innerHTML = `
+        <div class="stage text-center pt-6">
+          <div class="text-6xl mb-3">${S.emoji}</div>
+          <h1 class="text-3xl font-bold text-stone-900 mb-4">${S.title}</h1>
+          <p class="text-stone-700 leading-relaxed mb-8 text-left bg-white/70 rounded-2xl p-5 shadow-sm">${S.description}</p>
+          <label class="block text-left mb-6">
+            <span class="block text-sm text-stone-600 mb-2">請輸入您的名字（或暱稱）</span>
+            <input id="nameInput" type="text" placeholder="例如：小美"
+                   class="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-400" />
+          </label>
+          <button id="startBtn" class="w-full bg-rose-500 text-white font-semibold py-4 rounded-full shadow-md hover:bg-rose-600 active:scale-[0.99] transition">
+            開始填寫（共 ${S.questions.length} 題）
+          </button>
+        </div>
+      `;
+      document.getElementById("startBtn").onclick = () => {
+        state.name = document.getElementById("nameInput").value.trim();
+        state.stage = "answering";
+        render();
+      };
+    }
+
+    function renderQuestions() {
+      const total = S.questions.length;
+      const done = Object.keys(state.answers).length;
+      const pct = Math.round((done / total) * 100);
+
+      const progress = `
+        <div class="sticky top-0 -mx-5 px-5 py-3 bg-amber-50/95 backdrop-blur border-b border-stone-200 mb-5 z-10">
+          <div class="flex justify-between text-xs text-stone-500 mb-1">
+            <span>已填 ${done} / ${total}</span><span>${pct}%</span>
+          </div>
+          <div class="bg-stone-200 rounded-full h-2 overflow-hidden">
+            <div class="h-full bg-rose-400 transition-all" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+
+      const qs = S.questions.map((q, idx) => {
+        const opts = q.options.map((opt, oi) => {
+          const choice = oi + 1;
+          const selected = state.answers[q.id] === choice;
+          return `
+            <label class="block rounded-xl border p-3 cursor-pointer transition ${selected ? "border-rose-400 bg-rose-50 ring-2 ring-rose-200" : "border-stone-200 hover:border-rose-200"}">
+              <input type="radio" name="q-${q.id}" value="${choice}" ${selected ? "checked" : ""} class="sr-only" data-qid="${q.id}" data-choice="${choice}" />
+              <span class="flex gap-3 text-sm leading-relaxed text-stone-700">
+                <span class="shrink-0 w-6 h-6 rounded-full grid place-items-center text-xs font-semibold ${selected ? "bg-rose-500 text-white" : "bg-stone-100 text-stone-500"}">${choice}</span>
+                <span>${opt}</span>
+              </span>
+            </label>`;
+        }).join("");
+
+        return `
+          <div class="bg-white rounded-2xl p-5 shadow-sm mb-5">
+            ${q.dimension ? `<div class="text-xs text-rose-500 font-semibold mb-2">維度・${q.dimension}</div>` : ""}
+            <h3 class="font-semibold text-stone-900 mb-4 leading-relaxed">
+              <span class="text-rose-500 mr-2">${idx + 1}.</span>${q.text}
+            </h3>
+            <div class="space-y-2">${opts}</div>
+          </div>`;
+      }).join("");
+
+      app.innerHTML = `<div class="stage">${progress}${qs}</div>`;
+
+      app.querySelectorAll('input[type="radio"]').forEach(r => {
+        r.addEventListener("change", (e) => {
+          const qid = Number(e.target.dataset.qid);
+          const choice = Number(e.target.dataset.choice);
+          state.answers[qid] = choice;
+          render();
+          window.scrollTo({ top: window.scrollY });
+        });
+      });
+
+      bar.classList.remove("hidden");
+      const allDone = done === total;
+      submitBtn.disabled = !allDone;
+      submitBtn.textContent = allDone ? "送出並查看結果" : `還有 ${total - done} 題`;
+      submitBtn.onclick = submit;
+      errMsg.classList.add("hidden");
+    }
+
+    function renderSubmitting() {
+      bar.classList.add("hidden");
+      app.innerHTML = `
+        <div class="stage text-center pt-20">
+          <div class="text-5xl mb-4 animate-pulse">⏳</div>
+          <p class="text-stone-600">送出中...</p>
+        </div>`;
+    }
+
+    function renderDone() {
+      bar.classList.add("hidden");
+      const arr = S.questions.map(q => state.answers[q.id]);
+      const key = dominantOption(arr);
+      const t = S.types[key];
+
+      const dist = [1,2,3,4,5].map(k => {
+        const count = arr.filter(a => a === k).length;
+        const pct = (count / arr.length) * 100;
+        const type = S.types[k];
+        return `
+          <div class="flex items-center gap-3 text-sm">
+            <span class="w-24 shrink-0 text-stone-600">${type.emoji} ${type.name}</span>
+            <div class="flex-1 bg-amber-100 rounded-full h-3 overflow-hidden">
+              <div class="h-full bg-rose-400" style="width:${pct}%"></div>
+            </div>
+            <span class="w-8 text-right text-stone-700">${count}</span>
+          </div>`;
+      }).join("");
+
+      app.innerHTML = `
+        <div class="stage">
+          <div class="text-center mb-6 pt-6">
+            <div class="text-6xl mb-2">${t.emoji}</div>
+            <p class="text-stone-500 text-sm mb-1">您的狀態是</p>
+            <h1 class="text-3xl font-bold text-stone-900">${t.name}</h1>
+          </div>
+          <div class="bg-white rounded-2xl p-6 shadow-md mb-5">
+            <h2 class="font-semibold text-stone-900 mb-2">分析</h2>
+            <p class="text-stone-700 leading-relaxed">${t.analysis}</p>
+          </div>
+          <div class="bg-white/70 rounded-2xl p-5">
+            <h3 class="font-semibold text-stone-900 mb-3 text-sm">您的選項分布</h3>
+            <div class="space-y-2">${dist}</div>
+          </div>
+          <p class="text-center text-stone-500 text-xs mt-6">感謝填寫，老師已收到您的結果。</p>
+        </div>`;
+    }
+
+    async function submit() {
+      const total = S.questions.length;
+      const done = Object.keys(state.answers).length;
+      if (done < total) {
+        errMsg.textContent = `還有 ${total - done} 題沒填`;
+        errMsg.classList.remove("hidden");
+        return;
+      }
+
+      state.stage = "submitting";
+      render();
+
+      const arr = S.questions.map(q => state.answers[q.id]);
+      const key = dominantOption(arr);
+      const t = S.types[key];
+
+      if (CFG.WEBHOOK_URL) {
+        try {
+          await fetch(CFG.WEBHOOK_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+              slug: S.slug,
+              name: state.name || "匿名",
+              answers: arr,
+              typeName: t.name,
+              typeCode: t.code,
+              submittedAt: new Date().toISOString(),
+            }),
+          });
+        } catch (e) { /* no-cors 會靜默失敗，忽略 */ }
+      }
+
+      setTimeout(() => { state.stage = "done"; render(); }, 600);
+    }
+
+    render();
+  </script>
+</body>
+</html>
