@@ -6,7 +6,10 @@
 // 接收學員填寫的資料，寫進試算表
 function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const data = JSON.parse(e.postData.contents);
+  const raw = (e.parameter && e.parameter.payload)
+    ? e.parameter.payload
+    : (e.postData && e.postData.contents) || "{}";
+  const data = JSON.parse(raw);
   sheet.appendRow([
     data.submittedAt || new Date().toISOString(),
     data.slug || "",
@@ -26,7 +29,6 @@ function doGet(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const values = sheet.getDataRange().getValues();
   const wantedSlug = (e && e.parameter && e.parameter.slug) ? e.parameter.slug : "";
-
   const rows = [];
   for (let i = 1; i < values.length; i++) {
     const r = values[i];

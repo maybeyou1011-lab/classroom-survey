@@ -197,18 +197,20 @@
 
       if (CFG.WEBHOOK_URL) {
         try {
+          const payload = JSON.stringify({
+            slug: S.slug,
+            name: state.name || "匿名",
+            answers: arr,
+            typeName: t.name,
+            typeCode: t.code,
+            submittedAt: new Date().toISOString(),
+          });
+          const body = new URLSearchParams();
+          body.set("payload", payload);
           await fetch(CFG.WEBHOOK_URL, {
             method: "POST",
             mode: "no-cors",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({
-              slug: S.slug,
-              name: state.name || "匿名",
-              answers: arr,
-              typeName: t.name,
-              typeCode: t.code,
-              submittedAt: new Date().toISOString(),
-            }),
+            body: body,
           });
         } catch (e) { /* no-cors 會靜默失敗，忽略 */ }
       }
