@@ -42,39 +42,6 @@
 
     const errorBox = document.getElementById("errorBox");
 
-    function parseCsvLine(line) {
-      const out = [];
-      let cur = "", inQ = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') {
-          if (inQ && line[i+1] === '"') { cur += '"'; i++; }
-          else inQ = !inQ;
-        } else if (ch === "," && !inQ) { out.push(cur); cur = ""; }
-        else cur += ch;
-      }
-      out.push(cur);
-      return out;
-    }
-
-    function parseCsv(text) {
-      const lines = text.trim().split(/\r?\n/);
-      if (lines.length <= 1) return [];
-      const rows = [];
-      for (let i = 1; i < lines.length; i++) {
-        const cols = parseCsvLine(lines[i]);
-        if (cols.length < 5) continue;
-        rows.push({
-          submittedAt: cols[0] ?? "",
-          slug: cols[1] ?? "",
-          name: cols[2] ?? "匿名",
-          typeName: cols[3] ?? "",
-          typeCode: cols[4] ?? "",
-        });
-      }
-      return rows;
-    }
-
     function renderDist(rows) {
       const total = rows.length;
       document.getElementById("totalCount").textContent = total;
@@ -143,22 +110,23 @@
     }
 
     async function fetchAndRender() {
-      if (!CFG.SHEET_CSV_URL) {
-        errorBox.textContent = "尚未設定試算表 CSV 網址。請編輯 config.js 填入 SHEET_CSV_URL。";
+      if (!CFG.WEBHOOK_URL) {
+        errorBox.textContent = "尚未設定 Apps Script 網址。請編輯 config.js 填入 WEBHOOK_URL。";
         errorBox.classList.remove("hidden");
         return;
       }
       try {
-        const res = await fetch(`${CFG.SHEET_CSV_URL}&_=${Date.now()}`, { cache: "no-store" });
+        const url = `${CFG.WEBHOOK_URL}?slug=${encodeURIComponent(S.slug)}&_=${Date.now()}`;
+        const res = await fetch(url, { cache: "no-store", redirect: "follow" });
         if (!res.ok) throw new Error("HTTP " + res.status);
-        const text = await res.text();
-        const rows = parseCsv(text).filter(r => r.slug === S.slug && r.typeCode);
+        const json = await res.json();
+        const rows = Array.isArray(json.rows) ? json.rows.filter(r => r.typeCode) : [];
         renderDist(rows);
         renderRecent(rows);
         document.getElementById("lastUpdate").textContent = "最後更新 " + new Date().toLocaleTimeString("zh-TW");
         errorBox.classList.add("hidden");
       } catch (e) {
-        errorBox.textContent = "讀取試算表失敗：" + e.message;
+        errorBox.textContent = "讀取失敗：" + e.message + "（確認 Apps Script 部署時「有權存取」選「任何人」）";
         errorBox.classList.remove("hidden");
       }
     }
